@@ -55,6 +55,58 @@ def AckScan(host, ports, update_callback):
         update_callback(port)
     return filtered_ports
 
+def WindowScan(host, ports, update_callback):
+    open_ports = []
+    for port in ports:
+        if stop_scan_flag.is_set():
+            break
+        resp = sr1(IP(dst=host)/TCP(dport=port, flags="A"), timeout=1, verbose=0)
+        if resp is not None and resp.haslayer(TCP):
+            tcp_layer = resp.getlayer(TCP)
+            if tcp_layer.window > 0:
+                open_ports.append(port)
+        update_callback(port)
+    return open_ports
+
+def FinScan(host, ports, update_callback):
+    open_ports = []
+    for port in ports:
+        if stop_scan_flag.is_set():
+            break
+        resp = sr1(IP(dst=host)/TCP(dport=port, flags="F"), timeout=1, verbose=0)
+        if resp is None:
+            open_ports.append(port)
+        elif resp.haslayer(TCP) and resp.getlayer(TCP).flags == 0x4:  # RST flag
+            pass  # Closed, ignore for now
+        update_callback(port)
+    return open_ports
+
+def XmasScan(host, ports, update_callback):
+    open_ports = []
+    for port in ports:
+        if stop_scan_flag.is_set():
+            break
+        resp = sr1(IP(dst=host)/TCP(dport=port, flags="FPU"), timeout=1, verbose=0)
+        if resp is None:
+            open_ports.append(port)
+        elif resp.haslayer(TCP) and resp.getlayer(TCP).flags == 0x4:  # RST flag
+            pass  # Closed, ignore for now
+        update_callback(port)
+    return open_ports
+
+def NullScan(host, ports, update_callback):
+    open_ports = []
+    for port in ports:
+        if stop_scan_flag.is_set():
+            break
+        resp = sr1(IP(dst=host)/TCP(dport=port, flags=""), timeout=1, verbose=0)
+        if resp is None:
+            open_ports.append(port)
+        elif resp.haslayer(TCP) and resp.getlayer(TCP).flags == 0x4:  # RST flag
+            pass  # Closed, ignore for now
+        update_callback(port)
+    return open_ports
+
 def start_scan():
     target = ip_entry.get()
     port_input = port_entry.get()
@@ -85,6 +137,14 @@ def start_scan():
             open_ports = UdpScan(target, ports, update_progress)
         elif scan_type == "ACK Scan":
             filtered_ports = AckScan(target, ports, update_progress)
+        elif scan_type == "Window Scan":
+            open_ports = WindowScan(target, ports, update_progress)
+        elif scan_type == "FIN Scan":
+            open_ports = FinScan(target, ports, update_progress)
+        elif scan_type == "Xmas Scan":
+            open_ports = XmasScan(target, ports, update_progress)
+        elif scan_type == "Null Scan":
+            open_ports = NullScan(target, ports, update_progress)
         else:
             messagebox.showerror("Error", "Invalid scan type.")
             return
@@ -125,7 +185,7 @@ port_entry.grid(row=1, column=1, padx=10, pady=5)
 
 tk.Label(root, text="Scan Type:").grid(row=2, column=0, padx=10, pady=5)
 scan_type_var = tk.StringVar(value="SYN Scan")
-tk.OptionMenu(root, scan_type_var, "SYN Scan", "TCP Connect Scan", "UDP Scan", "ACK Scan").grid(row=2, column=1, padx=10, pady=5)
+tk.OptionMenu(root, scan_type_var, "SYN Scan", "TCP Connect Scan", "UDP Scan", "ACK Scan", "Window Scan", "FIN Scan", "Xmas Scan", "Null Scan").grid(row=2, column=1, padx=10, pady=5)
 
 tk.Button(root, text="Start Scan", command=start_scan).grid(row=3, column=0, padx=10, pady=5)
 tk.Button(root, text="Stop Scan", command=stop_scan).grid(row=3, column=1, padx=10, pady=5)
